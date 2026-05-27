@@ -119,7 +119,7 @@
     </div>
     <p style="font-size:12px;color:var(--text3);margin-top:8px;">이 링크를 단체 카톡에 공유하면 팀원들이 각자 편지를 써요</p>
   </div>
-  <button class="btn btn-primary" style="margin-top:1rem;" onclick="openReveal()">💌 모든 편지 보기</button>
+  <button class="btn btn-primary" style="margin-top:1rem;" onclick="openReveal()">💌 모든 편지 보기 (방장용)</button>
 </div>
 
 <div id="s-join" class="screen">
@@ -163,6 +163,7 @@
     <div class="char-count" id="char-count">0 / 300</div>
     <div id="write-err" class="err" style="display:none;"></div>
     <button class="btn btn-primary" id="send-btn" onclick="sendLetter()">편지 보내기 💌</button>
+    <button class="btn btn-outline" style="width:100%;margin-top:8px;" onclick="openMyLetters()">💌 내가 받은 편지 보기</button>
   </div>
 </div>
 
@@ -171,6 +172,7 @@
     <div style="font-size:56px;margin-bottom:1rem;">💌</div>
     <h2 id="sent-title" style="margin-bottom:8px;"></h2>
     <p style="font-size:14px;color:var(--text2);margin-bottom:2rem;" id="sent-sub"></p>
+    <button class="btn btn-primary" style="width:auto;margin:0 auto 10px;" onclick="openMyLetters()">💌 내가 받은 편지 보기</button>
     <button class="btn btn-outline" style="width:auto;margin:0 auto;" onclick="show('s-home')">홈으로</button>
   </div>
 </div>
@@ -382,14 +384,38 @@ async function sendLetter(){
   finally{btn.disabled=false;btn.textContent='편지 보내기 💌';}
 }
 
+async function openMyLetters(){
+  if(!G.room||!G.writer)return;
+  try{
+    G.letters=await dbGet('letters',{room_id:G.room.id,order:'created_at'});
+    const myName=G.writer;
+    const myLetters=G.letters.filter(l=>l.recipient===myName);
+    document.getElementById('reveal-title').textContent='내가 받은 편지';
+    document.getElementById('reveal-sub').textContent=myLetters.length?`${myLetters.length}통의 편지가 왔어요`:'아직 편지가 없어요';
+    document.getElementById('reveal-tabs').style.display='none';
+    G.revealMode='mine';
+    renderRevealBody(myName);
+    show('s-reveal');
+  }catch(e){toast('편지를 불러오지 못했어요.');console.error(e);}
+}
+
 async function openReveal(){
   if(!G.room)return;
   try{
     G.letters=await dbGet('letters',{room_id:G.room.id,order:'created_at'});
     const done=new Set(G.letters.map(l=>l.writer)).size;
+    document.getElementById('reveal-title').textContent='편지 모아보기';
     document.getElementById('reveal-sub').textContent=`${done}/${G.room.names.length}명 작성 완료`;
-    renderRevealTabs();show('s-reveal');
+    document.getElementById('reveal-tabs').style.display='flex';
+    G.revealMode='all';
+    renderRevealTabs();
+    show('s-reveal');
   }catch(e){toast('편지를 불러오지 못했어요.');console.error(e);}
+}
+
+function revealGoBack(){
+  if(G.revealMode==='mine') show('s-sent');
+  else show('s-links');
 }
 
 function renderRevealTabs(){
