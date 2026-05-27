@@ -190,10 +190,12 @@
 </div>
 <div id="toast"></div>
 
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 <script>
 const SUPABASE_URL='https://unpdaglwlgyfeajoqujc.supabase.co';
 const SUPABASE_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVucGRhZ2x3bGd5ZmVham9xdWpjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk4OTI5OTYsImV4cCI6MjA5NTQ2ODk5Nn0.pwTDq_J_ef3bL3QtxNMF6nLnOwgGLbAbU99kWVkTGjg';
-const H={'Content-Type':'application/json','apikey':SUPABASE_KEY,'Authorization':'Bearer '+SUPABASE_KEY,'Prefer':'return=representation'};
+const { createClient } = supabase;
+const db = createClient(SUPABASE_URL, SUPABASE_KEY);
 
 const COLORS=[{bg:'#FFF5F5',bd:'#FFCDD2'},{bg:'#FFF8E7',bd:'#FFE082'},{bg:'#F0FAF0',bd:'#C8E6C9'},{bg:'#EFF6FF',bd:'#BBDEFB'},{bg:'#F5F0FF',bd:'#E1D5F5'},{bg:'#FFF3E0',bd:'#FFCC80'}];
 const STICKERS=['🌸','🌟','☀️','🌈','🎉','💌','🍀','🎀','🫧','🌙','🦋','🌺'];
@@ -202,15 +204,21 @@ const AV_FG=['#0C447C','#085041','#712B13','#3C3489','#633806','#72243E','#27500
 
 let G={room:null,writer:null,selSticker:'',selColor:0,letters:[]};
 
-async function dbGet(table,params=''){
-  const r=await fetch(`${SUPABASE_URL}/rest/v1/${table}${params}`,{headers:H});
-  if(!r.ok)throw new Error(await r.text());
-  return r.json();
+async function dbGet(table,params){
+  let q=db.from(table).select('*');
+  if(params&&params.id)q=q.eq('id',params.id);
+  if(params&&params.room_id)q=q.eq('room_id',params.room_id);
+  if(params&&params.writer)q=q.eq('writer',params.writer);
+  if(params&&params.order)q=q.order(params.order,{ascending:true});
+  if(params&&params.select)q=q.select(params.select);
+  const {data,error}=await q;
+  if(error)throw new Error(error.message);
+  return data;
 }
 async function dbPost(table,body){
-  const r=await fetch(`${SUPABASE_URL}/rest/v1/${table}`,{method:'POST',headers:H,body:JSON.stringify(body)});
-  if(!r.ok)throw new Error(await r.text());
-  return r.json();
+  const {data,error}=await db.from(table).insert(body).select();
+  if(error)throw new Error(error.message);
+  return data;
 }
 
 function ini(n){return(n||'').trim().slice(0,2).toUpperCase();}
@@ -274,7 +282,7 @@ function renderLinksScreen(){
 async function refreshStatus(){
   if(!G.room)return;
   try{
-    const letters=await dbGet('letters',`?room_id=eq.${G.room.id}&select=writer`);
+    const letters=await dbGet('letters',{room_id:G.room.id,select:'writer'});
     const writers=new Set(letters.map(l=>l.writer));
     const done=writers.size,total=G.room.names.length;
     document.getElementById('progress-fill').style.width=Math.round(done/total*100)+'%';
@@ -312,7 +320,7 @@ function doJoin(){
 
 async function loadWriteScreen(roomId,writerName){
   try{
-    const rooms=await dbGet('rooms',`?id=eq.${roomId}`);
+    const rooms=await dbGet('rooms',{id:roomId});
     if(!rooms.length){toast('방을 찾을 수 없어요.');return;}
     G.room=rooms[0];G.writer=writerName;
     const target=G.room.pairs[writerName];
@@ -322,7 +330,7 @@ async function loadWriteScreen(roomId,writerName){
     document.getElementById('target-name').textContent=target;
     const av=document.getElementById('target-av');
     av.textContent=ini(target);av.style.background=AV_BG[ci];av.style.color=AV_FG[ci];
-    const existing=await dbGet('letters',`?room_id=eq.${roomId}&writer=eq.${encodeURIComponent(writerName)}`);
+    const existing=await dbGet('letters',{room_id:roomId,writer:writerName});
     if(existing.length){const l=existing[0];document.getElementById('msg').value=l.content;G.selSticker=l.sticker||'';G.selColor=l.color||0;}
     else{document.getElementById('msg').value='';G.selSticker='';G.selColor=0;}
     renderStickers();renderColorDots();updatePaper();onMsgInput();
@@ -377,7 +385,7 @@ async function sendLetter(){
 async function openReveal(){
   if(!G.room)return;
   try{
-    G.letters=await dbGet('letters',`?room_id=eq.${G.room.id}&order=created_at.asc`);
+    G.letters=await dbGet('letters',{room_id:G.room.id,order:'created_at'});
     const done=new Set(G.letters.map(l=>l.writer)).size;
     document.getElementById('reveal-sub').textContent=`${done}/${G.room.names.length}명 작성 완료`;
     renderRevealTabs();show('s-reveal');
