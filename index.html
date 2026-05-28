@@ -165,6 +165,16 @@
     <button class="btn btn-primary" id="send-btn" onclick="sendLetter()">편지 보내기 💌</button>
     <button class="btn btn-outline" style="width:100%;margin-top:8px;" onclick="openMyLetters()">💌 내가 받은 편지 보기</button>
   </div>
+
+  <!-- 추가 편지 -->
+  <div class="card" id="extra-card" style="margin-top:.5rem;">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
+      <div style="font-size:14px;font-weight:500;color:var(--color-text-primary);">다른 팀원에게도 편지 쓰기</div>
+      <span style="font-size:12px;color:var(--color-text-secondary);">선택사항</span>
+    </div>
+    <div id="extra-list"></div>
+    <button class="btn btn-outline" style="width:100%;font-size:13px;" onclick="addExtraLetter()">＋ 편지 추가하기</button>
+  </div>
 </div>
 
 <div id="s-sent" class="screen">
@@ -204,7 +214,7 @@ const STICKERS=['🌸','🌟','☀️','🌈','🎉','💌','🍀','🎀','🫧'
 const AV_BG=['#B5D4F4','#9FE1CB','#F5C4B3','#CECBF6','#FAC775','#F4C0D1','#C0DD97','#F0997B'];
 const AV_FG=['#0C447C','#085041','#712B13','#3C3489','#633806','#72243E','#27500A','#993C1D'];
 
-let G={room:null,writer:null,selSticker:'',selColor:0,letters:[]};
+let G={room:null,writer:null,selSticker:'',selColor:0,letters:[],extraLetters:[],revealMode:'mine'};
 
 async function dbGet(table,params){
   let q=db.from(table).select('*');
@@ -335,7 +345,9 @@ async function loadWriteScreen(roomId,writerName){
     const existing=await dbGet('letters',{room_id:roomId,writer:writerName});
     if(existing.length){const l=existing[0];document.getElementById('msg').value=l.content;G.selSticker=l.sticker||'';G.selColor=l.color||0;}
     else{document.getElementById('msg').value='';G.selSticker='';G.selColor=0;}
+    G.extraLetters=[];
     renderStickers();renderColorDots();updatePaper();onMsgInput();
+    renderExtraList();
     show('s-write');
   }catch(e){toast('오류가 발생했어요.');console.error(e);}
 }
@@ -377,8 +389,15 @@ async function sendLetter(){
   try{
     const target=G.room.pairs[G.writer];
     await dbPost('letters',{room_id:G.room.id,writer:G.writer,recipient:target,content:text,sticker:G.selSticker,color:G.selColor});
+    // 추가 편지들도 저장
+    for(const ex of G.extraLetters){
+      if(ex.text.trim()&&ex.recipient){
+        await dbPost('letters',{room_id:G.room.id,writer:G.writer,recipient:ex.recipient,content:ex.text.trim(),sticker:ex.sticker,color:ex.color});
+      }
+    }
+    const extraCount=G.extraLetters.filter(e=>e.text.trim()&&e.recipient).length;
     document.getElementById('sent-title').textContent=target+'에게 편지를 전달했어요! 💌';
-    document.getElementById('sent-sub').textContent='소중한 마음이 잘 전달될 거예요';
+    document.getElementById('sent-sub').textContent=extraCount>0?`마니또 포함 총 ${1+extraCount}명에게 편지를 보냈어요`:'소중한 마음이 잘 전달될 거예요';
     show('s-sent');
   }catch(e){err.textContent='저장 중 오류가 발생했어요. 다시 시도해주세요.';err.style.display='block';console.error(e);}
   finally{btn.disabled=false;btn.textContent='편지 보내기 💌';}
@@ -443,6 +462,57 @@ function renderRevealBody(recipient){
     html+=`<div class="letter-card"><div class="letter-from"><span>💌 마니또의 편지</span><span style="color:var(--text3);font-size:11px;">${ts}</span></div><div class="letter-paper" style="background:${c.bg};border:0.5px solid ${c.bd};">${l.sticker?`<div class="letter-sk">${l.sticker}</div>`:''}<div class="letter-text">${safe}</div></div></div>`;
   });
   body.innerHTML=html;
+}
+
+
+function renderExtraList(){
+  const el=document.getElementById('extra-list');
+  if(!el)return;
+  el.innerHTML='';
+  G.extraLetters.forEach((ex,i)=>{
+    const others=G.room.names.filter(n=>n!==G.writer);
+    const opts=others.map(n=>`<option value="${n}" ${ex.recipient===n?'selected':''}>${n}</option>`).join('');
+    const c=COLORS[ex.color||0];
+    const div=document.createElement('div');
+    div.style.cssText='border:0.5px solid var(--color-border-tertiary);border-radius:var(--border-radius-md);padding:12px;margin-bottom:10px;';
+    div.innerHTML=`
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+        <select onchange="updateExtra(${i},'recipient',this.value)" style="flex:1;padding:7px 10px;border:0.5px solid var(--color-border-secondary);border-radius:var(--border-radius-sm);font-size:14px;background:var(--color-background-secondary);color:var(--color-text-primary);margin-right:8px;">
+          <option value="">받는 사람 선택</option>${opts}
+        </select>
+        <button onclick="removeExtra(${i})" style="width:32px;height:32px;border:0.5px solid var(--color-border-secondary);border-radius:var(--border-radius-sm);background:none;cursor:pointer;font-size:14px;color:var(--color-text-secondary);flex-shrink:0;">✕</button>
+      </div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px;">
+        ${STICKERS.map(s=>`<button onclick="updateExtra(${i},'sticker','${s}')" style="width:34px;height:34px;font-size:17px;border:${ex.sticker===s?'2px solid var(--color-text-primary)':'0.5px solid var(--color-border-tertiary)'};border-radius:6px;background:var(--color-background-primary);cursor:pointer;">${s}</button>`).join('')}
+      </div>
+      <div style="display:flex;gap:6px;margin-bottom:8px;">
+        ${COLORS.map((c2,ci)=>`<div onclick="updateExtra(${i},'color',${ci})" style="width:24px;height:24px;border-radius:50%;background:${c2.bg};border:${ex.color===ci?'3px solid var(--color-text-primary)':'2px solid '+c2.bd};cursor:pointer;"></div>`).join('')}
+      </div>
+      <div style="background:${c.bg};border:0.5px solid ${c.bd};border-radius:var(--border-radius-sm);padding:10px;">
+        ${ex.sticker?`<div style="font-size:22px;margin-bottom:4px;">${ex.sticker}</div>`:''}
+        <textarea onchange="updateExtra(${i},'text',this.value)" placeholder="따뜻한 말 한마디를 남겨요..." rows="4" maxlength="300" style="width:100%;background:transparent;border:none;outline:none;resize:none;font-size:14px;line-height:1.7;color:var(--color-text-primary);font-family:inherit;">${ex.text||''}</textarea>
+      </div>
+    `;
+    el.appendChild(div);
+  });
+}
+
+function addExtraLetter(){
+  const others=G.room.names.filter(n=>n!==G.writer&&n!==G.room.pairs[G.writer]);
+  const used=G.extraLetters.map(e=>e.recipient);
+  const next=others.find(n=>!used.includes(n))||'';
+  G.extraLetters.push({recipient:next,text:'',sticker:'',color:Math.floor(Math.random()*COLORS.length)});
+  renderExtraList();
+}
+
+function removeExtra(i){
+  G.extraLetters.splice(i,1);
+  renderExtraList();
+}
+
+function updateExtra(i,key,val){
+  G.extraLetters[i][key]=key==='color'?parseInt(val):val;
+  renderExtraList();
 }
 
 buildNameList();
