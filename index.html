@@ -179,13 +179,13 @@
 
 <div id="s-reveal" class="screen">
   <div class="back-row">
-    <button class="btn btn-outline" onclick="show('s-links')" style="width:auto;padding:8px 12px;">← 뒤로</button>
+    <button class="btn btn-outline" id="reveal-back-btn" onclick="revealGoBack()" style="width:auto;padding:8px 12px;">← 뒤로</button>
     <div>
-      <h2>편지 모아보기</h2>
+      <h2 id="reveal-title">편지 보기</h2>
       <div style="font-size:12px;color:var(--text2);" id="reveal-sub"></div>
     </div>
   </div>
-  <div class="tab-bar" id="reveal-tabs"></div>
+  <div class="tab-bar" id="reveal-tabs" style="display:none;"></div>
   <div id="reveal-body"></div>
 </div>
 
